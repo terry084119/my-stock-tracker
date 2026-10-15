@@ -1,0 +1,16 @@
+# Local secrets and deployment configuration
+.clasp.json
+.clasprc.json
+.env
+.env.*
+!.env.example
+
+# Local tooling
+node_modules/
+.DS_Store
+Thumbs.db
+
+# Personal exports
+*.csv
+*.xlsx
+
