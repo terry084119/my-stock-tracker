@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的投資與新聞追蹤台</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1, h2 { color: #2c3e50; }
+        form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px; background: #ecf0f1; padding: 20px; border-radius: 8px;}
+        input, button { padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; }
+        button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; grid-column: 1 / -1; }
+        button:hover { background-color: #2980b9; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #34495e; color: white; }
+        .news-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .news-card { background: #fff; padding: 15px; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .news-card a { color: #2980b9; text-decoration: none; font-weight: bold; }
+        .news-card p { font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 我的投資與新聞追蹤台</h1>
+        <!-- 新增投資紀錄表單 -->
+        <form id="investForm">
+            <input type="text" id="ticker" placeholder="股票代號 (如: 2330)" required>
+            <input type="text" id="name" placeholder="股票名稱 (如: 台積電)" required>
+            <input type="date" id="buyDate" required>
+            <input type="number" id="shares" placeholder="股數" required>
+            <input type="number" id="buyPrice" placeholder="買入價格" step="0.01" required>
+            <button type="submit">新增紀錄並同步至 Google 試算表</button>
+        </form>
+
+        <!-- 持股列表 -->
+        <h2>我的持股 (即時報價)</h2>
+        <table id="portfolioTable">
+            <thead>
+                <tr>
+                    <th>代號</th>
+                    <th>名稱</th>
+                    <th>買入日期</th>
+                    <th>股數</th>
+                    <th>買入價</th>
+                    <th>目前股價</th>
+                    <th>目前損益</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 資料將由 JS 動態載入 -->
+            </tbody>
+        </table>
+
+        <!-- 專屬新聞區 -->
+        <h2>📰 庫存標的精選新聞與討論</h2>
+        <div class="news-grid" id="newsContainer">
+            <p>正在為您抓取最新台灣在地與國際財經新聞...</p>
+        </div>
+    </div>
+
+    <script>
+        // const API_URL = 'https://script.google.com/macros/s/AKfycbwThi2YMp0WffNB263phf1xIU1a59XVQ761Y8UAL3me0WLeEgrmfY3ptiJH7i4I4u0DFw/exec';
+
+        // 監聽表單送出
+        document.getElementById('investForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button');
+            submitBtn.innerText = '儲存中...';
+
+            const data = {
+                ticker: document.getElementById('ticker').value,
+                name: document.getElementById('name').value,
+                buyDate: document.getElementById('buyDate').value,
+                shares: document.getElementById('shares').value,
+                buyPrice: document.getElementById('buyPrice').value
+            };
+
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify(data),
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' } // 避免 CORS preflight
+            });
+
+            alert('儲存成功！');
+            submitBtn.innerText = '新增紀錄並同步至 Google 試算表';
+            e.target.reset();
+            loadPortfolio(); // 重新載入表格
+        });
+
+        // 載入試算表資料
+        async function loadPortfolio() {
+            if(API_URL === '請貼上你的_APPS_SCRIPT_URL') return;
+            
+            const response = await fetch(API_URL);
+            const data = await response.json();
+            const tbody = document.querySelector('#portfolioTable tbody');
+            tbody.innerHTML = '';
+            
+            let stockNames = new Set();
+
+            data.forEach(item => {
+                if(item.ticker && item.name) {
+                    stockNames.add(item.name); // 收集標的名稱用來搜新聞
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${item.ticker}</td>
+                        <td>${item.name}</td>
+                        <td>${item.buyDate.substring(0, 10)}</td>
+                        <td>${item.shares}</td>
+                        <td>${item.buyPrice}</td>
+                        <td>${item.currentPrice || '載入中'}</td>
+                        <td style="color: ${item.profit >= 0 ? 'red' : 'green'}">${item.profit !== '' ? item.profit.toFixed(2) : '載入中'}</td>
+                    `;
+                    // 備註：台股習慣紅漲綠跌
+                    tbody.appendChild(tr);
+                }
+            });
+
+            // 如果有持股，根據持股抓取新聞
+            if(stockNames.size > 0) {
+                fetchNews(Array.from(stockNames).join(' OR '));
+            } else {
+                fetchNews('台灣股市 OR 總體經濟'); // 預設延伸新聞
+            }
+        }
+
+        // 抓取新聞 (利用 Google News RSS + rss2json，限定 zh-TW 確保台灣媒體來源)
+        async function fetchNews(keywords) {
+            const newsContainer = document.getElementById('newsContainer');
+            const rssUrl = encodeURIComponent(`https://news.google.com/rss/search?q=${keywords}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`);
+            const jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}`;
+
+            try {
+                const res = await fetch(jsonUrl);
+                const data = await res.json();
+                
+                newsContainer.innerHTML = '';
+                // 限制只取前 6 篇精選新聞
+                data.items.slice(0, 6).forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'news-card';
+                    card.innerHTML = `
+                        <a href="${item.link}" target="_blank">${item.title}</a>
+                        <p>來源: ${item.source || '相關媒體'} | 📅 ${item.pubDate.substring(0, 10)}</p>
+                    `;
+                    newsContainer.appendChild(card);
+                });
+            } catch (error) {
+                newsContainer.innerHTML = '<p>新聞抓取失敗，請稍後再試。</p>';
+            }
+        }
+
+        // 初始化
+        loadPortfolio();
+    </script>
+</body>
+</html>
